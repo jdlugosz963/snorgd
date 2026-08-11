@@ -1,11 +1,16 @@
 module github.com/jdlugosz963/snorgd
 
-go 1.24
+go 1.24.13
 
-require github.com/jdlugosz963/snorg v0.3.1-0.20260810224036-181187c3869e
+require github.com/jdlugosz963/snorg v0.3.1
 
 require (
+	github.com/epiclabs-io/diff3 v0.0.0-20260520111523-3b1669897fb1 // indirect
 	github.com/flosch/pongo2/v6 v6.1.0 // indirect
+	github.com/gotranspile/cxgo v0.5.2 // indirect
+	github.com/gotranspile/gotrace v0.0.0-20230726133510-8c9665a39b09 // indirect
+	github.com/jdlugosz963/sntool v1.1.0 // indirect
+	github.com/njchilds90/go-diffpatch v1.0.0 // indirect
 	github.com/openai/openai-go v1.12.0 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
