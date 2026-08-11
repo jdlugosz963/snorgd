@@ -8,7 +8,7 @@ services:
     volumes:
       - archive:/data/archive               # SNORGD_ARCHIVE
       - state:/data/state                   # SNORGD_STATE_DIR
-      - ./ssh:/keys:ro,Z
+      - ./ssh:/keys:ro,Z             # SNORGD_SSH_KEY + SNORGD_SSH_KNOWN_HOSTS
     restart: unless-stopped
 
 volumes:

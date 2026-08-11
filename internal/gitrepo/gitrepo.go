@@ -1,44 +1,73 @@
 // Package gitrepo wraps the archive's git working tree — the local clone of the
-// notes repo that each ingest commits into.
+// notes repo that each ingest commits into. It drives git in-process via go-git,
+// so the runtime needs no `git` binary or `openssh-client`.
 package gitrepo
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"strings"
+	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
+
+// Options configures Ensure. Dir/Remote/Name/Email mirror the daemon config; the
+// SSH* fields are only consulted when Remote is an SSH URL.
+type Options struct {
+	Dir              string
+	Remote           string
+	Name             string // committer identity (see CommitPush)
+	Email            string
+	SSHKey           string // path to the private key
+	SSHKeyPassphrase string
+	KnownHosts       string // path to a known_hosts file (host keys verified strictly)
+}
 
 // Repo is the archive's git working tree. name/email are the committer identity
 // applied to each commit (see CommitPush); empty values fall back to git's own
-// configuration.
+// configuration. auth is the transport auth for pushes/clones (nil for HTTPS or
+// path remotes).
 type Repo struct {
-	dir   string
+	repo  *git.Repository
 	name  string
 	email string
+	auth  transport.AuthMethod
 }
 
-// Ensure returns a Repo for dir, cloning remote into it when dir is missing or
-// empty, and verifying dir is a git work tree otherwise. An empty dir is treated
-// like a missing one: `git clone` accepts an existing empty target, and containers
-// mount the archive as a pre-created (empty) volume, so requiring absence would
-// never clone there. name/email set the committer identity for CommitPush.
-func Ensure(dir, remote, name, email string) (*Repo, error) {
-	empty, err := dirEmptyOrMissing(dir)
+// Ensure returns a Repo for opts.Dir, cloning opts.Remote into it when the dir is
+// missing or empty, and opening it as a git work tree otherwise. An empty dir is
+// treated like a missing one: clone accepts an existing empty target, and containers
+// mount the archive as a pre-created (empty) volume, so requiring absence would never
+// clone there. Name/Email set the committer identity for CommitPush.
+func Ensure(opts Options) (*Repo, error) {
+	auth, err := buildAuth(opts)
 	if err != nil {
 		return nil, err
 	}
+
+	empty, err := dirEmptyOrMissing(opts.Dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var repo *git.Repository
 	if empty {
-		if _, err := git("", "clone", remote, dir); err != nil {
-			return nil, fmt.Errorf("clone %s: %w", remote, err)
+		repo, err = git.PlainClone(opts.Dir, false, &git.CloneOptions{URL: opts.Remote, Auth: auth})
+		if err != nil {
+			return nil, fmt.Errorf("clone %s: %w", opts.Remote, err)
 		}
-		return &Repo{dir: dir, name: name, email: email}, nil
+	} else {
+		repo, err = git.PlainOpen(opts.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("%s is not a git repository: %w", opts.Dir, err)
+		}
 	}
-	if _, err := git(dir, "rev-parse", "--is-inside-work-tree"); err != nil {
-		return nil, fmt.Errorf("%s is not a git repository: %w", dir, err)
-	}
-	return &Repo{dir: dir, name: name, email: email}, nil
+	return &Repo{repo: repo, name: opts.Name, email: opts.Email, auth: auth}, nil
 }
 
 // dirEmptyOrMissing reports whether dir does not exist or exists as an empty
@@ -58,51 +87,64 @@ func dirEmptyOrMissing(dir string) (bool, error) {
 // message and pushes to the upstream branch. It reports whether a commit was made
 // (a clean tree is not an error — re-ingesting an unchanged note is a no-op).
 func (r *Repo) CommitPush(message string) (bool, error) {
-	if _, err := git(r.dir, "add", "-A"); err != nil {
-		return false, err
-	}
-	dirty, err := r.dirty()
+	wt, err := r.repo.Worktree()
 	if err != nil {
 		return false, err
 	}
-	if !dirty {
-		return false, nil
-	}
-	args := []string{"commit", "-m", message}
-	if r.name != "" && r.email != "" {
-		// -c must precede the subcommand: git -c user.name=… -c user.email=… commit …
-		args = append([]string{"-c", "user.name=" + r.name, "-c", "user.email=" + r.email}, args...)
-	}
-	if _, err := git(r.dir, args...); err != nil {
+	// AddOptions{All: true} stages modifications, additions, and deletions — the
+	// equivalent of `git add -A`.
+	if err := wt.AddWithOptions(&git.AddOptions{All: true}); err != nil {
 		return false, err
 	}
-	if _, err := git(r.dir, "push"); err != nil {
+	status, err := wt.Status()
+	if err != nil {
+		return false, err
+	}
+	if status.IsClean() {
+		return false, nil
+	}
+
+	opts := &git.CommitOptions{}
+	if r.name != "" && r.email != "" {
+		// A configured identity overrides the repo's own user.name/user.email.
+		sig := &object.Signature{Name: r.name, Email: r.email, When: time.Now()}
+		opts.Author, opts.Committer = sig, sig
+	}
+	if _, err := wt.Commit(message, opts); err != nil {
+		return false, err
+	}
+	if err := r.repo.Push(&git.PushOptions{Auth: r.auth}); err != nil {
 		return true, fmt.Errorf("committed but push failed: %w", err)
 	}
 	return true, nil
 }
 
-// dirty reports whether the working tree has staged or unstaged changes.
-func (r *Repo) dirty() (bool, error) {
-	out, err := git(r.dir, "status", "--porcelain")
+// buildAuth returns the transport auth for the remote. SSH remotes use the
+// configured private key with strict known_hosts verification; HTTPS and local
+// path remotes need no auth (nil).
+func buildAuth(opts Options) (transport.AuthMethod, error) {
+	ep, err := transport.NewEndpoint(opts.Remote)
 	if err != nil {
-		return false, err
+		return nil, fmt.Errorf("parse remote %q: %w", opts.Remote, err)
 	}
-	return strings.TrimSpace(out) != "", nil
-}
+	if ep.Protocol != "ssh" {
+		return nil, nil
+	}
 
-// git runs a git command in dir (or the current dir when dir is "") and returns its
-// combined output, wrapping a non-zero exit with that output for context.
-func git(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
-	if dir != "" {
-		cmd.Dir = dir
+	if opts.SSHKey == "" {
+		return nil, errors.New("SSH remote requires a private key (set SNORGD_SSH_KEY)")
 	}
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	if err := cmd.Run(); err != nil {
-		return buf.String(), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(buf.String()))
+	if opts.KnownHosts == "" {
+		return nil, errors.New("SSH remote requires a known_hosts file (set SNORGD_SSH_KNOWN_HOSTS)")
 	}
-	return buf.String(), nil
+	auth, err := gitssh.NewPublicKeysFromFile(ep.User, opts.SSHKey, opts.SSHKeyPassphrase)
+	if err != nil {
+		return nil, fmt.Errorf("load SSH key %s: %w", opts.SSHKey, err)
+	}
+	cb, err := knownhosts.New(opts.KnownHosts)
+	if err != nil {
+		return nil, fmt.Errorf("load known_hosts %s: %w", opts.KnownHosts, err)
+	}
+	auth.HostKeyCallback = cb
+	return auth, nil
 }

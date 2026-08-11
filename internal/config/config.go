@@ -34,6 +34,13 @@ type Config struct {
 	// daemon does not depend on an ambient global git identity (containers, CI).
 	GitName  string
 	GitEmail string
+
+	// SSH auth for an SSH Remote (git@host:…). All optional: HTTPS remotes need
+	// none, and a missing key/known_hosts surfaces as a clear error at clone/push
+	// time rather than a startup failure.
+	SSHKey           string // path to the private key
+	SSHKeyPassphrase string // passphrase for the key, if encrypted
+	SSHKnownHosts    string // path to a known_hosts file (host keys verified strictly)
 }
 
 // Load reads the configuration from the environment, applying defaults and
@@ -53,6 +60,9 @@ func Load() (*Config, error) {
 		StateDir:            expandHome(os.Getenv("SNORGD_STATE_DIR")),
 		GitName:             strings.TrimSpace(os.Getenv("SNORGD_GIT_NAME")),
 		GitEmail:            strings.TrimSpace(os.Getenv("SNORGD_GIT_EMAIL")),
+		SSHKey:              expandHome(strings.TrimSpace(os.Getenv("SNORGD_SSH_KEY"))),
+		SSHKeyPassphrase:    os.Getenv("SNORGD_SSH_KEY_PASSPHRASE"),
+		SSHKnownHosts:       expandHome(strings.TrimSpace(os.Getenv("SNORGD_SSH_KNOWN_HOSTS"))),
 	}
 
 	// The Dropbox API wants the root as "" (not "/") and no trailing slash.

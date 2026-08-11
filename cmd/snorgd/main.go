@@ -27,7 +27,15 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	repo, err := gitrepo.Ensure(cfg.Archive, cfg.Remote, cfg.GitName, cfg.GitEmail)
+	repo, err := gitrepo.Ensure(gitrepo.Options{
+		Dir:              cfg.Archive,
+		Remote:           cfg.Remote,
+		Name:             cfg.GitName,
+		Email:            cfg.GitEmail,
+		SSHKey:           cfg.SSHKey,
+		SSHKeyPassphrase: cfg.SSHKeyPassphrase,
+		KnownHosts:       cfg.SSHKnownHosts,
+	})
 	if err != nil {
 		log.Fatalf("archive: %v", err)
 	}
