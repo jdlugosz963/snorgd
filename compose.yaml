@@ -1,0 +1,16 @@
+services:
+  snorgd:
+    build:
+      context: .
+    image: snorgd
+    env_file:
+      - snorgd.env
+    volumes:
+      - archive:/data/archive               # SNORGD_ARCHIVE
+      - state:/data/state                   # SNORGD_STATE_DIR
+      - ./ssh:/keys:ro,Z
+    restart: unless-stopped
+
+volumes:
+  archive:
+  state:

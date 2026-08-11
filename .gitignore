@@ -1,0 +1,7 @@
+/snorgd
+snorgd.env
+.env
+
+# Docker deploy-key dir (mounted at /keys); keep the dir, ignore the keys.
+/ssh/*
+!/ssh/.gitkeep
