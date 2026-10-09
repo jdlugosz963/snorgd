@@ -1,0 +1,81 @@
+% The LaTeX template the letters PDF is typeset through.
+%
+% Pandoc converts each answer's markdown into the LaTeX that lands in $$body$$, so
+% escaping, maths and code highlighting are already handled by the time this file
+% sees them. What is left here is the look of the document, and it is meant to be
+% edited: change the geometry, the face, the sectioning, anything.
+%
+% Three things must stay for the content to typeset at all:
+%   \usepackage{amsmath,amssymb}      -- display maths and align environments
+%   $$highlighting-macros$$           -- the macros pandoc's fenced code blocks use
+%   the table block below             -- see the comment on it
+%
+% It is compiled by whatever letter.pdf_command names. The default engine is
+% pdflatex; to use a system font instead, switch that command to
+% --pdf-engine=xelatex and replace the fontenc/lmodern lines with fontspec.
+
+\documentclass[12pt]{article}
+
+% The Supernote page (1920x2560 px) at 300 dpi, so a page of the PDF is the same
+% shape as a page of the notebook it was written in.
+\usepackage[paperwidth=162mm,paperheight=216mm,margin=12mm]{geometry}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+% The table block. Pandoc's own preamble is the authority on what its table output
+% needs, and this is the part of it that matters here: \newcounter{none} because a
+% markdown table without a caption compiles to \def\LTcaptype{none} and longtable
+% then steps a counter by that name, and calc because a wide table's column widths
+% arrive as \real{} arithmetic. Without the counter, any table at all is a fatal
+% "No counter 'none' defined".
+\usepackage{longtable,booktabs,array}
+\newcounter{none}
+\usepackage{calc}
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+
+\usepackage[hidelinks]{hyperref}
+% A long URL has nowhere to go on a 162mm page, and an answer that cites one should
+% not push the margin off the screen.
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{}
+
+% Blank-line paragraphs rather than indents: easier to scan on a small screen.
+\usepackage{parskip}
+
+% E-ink is unforgiving about overfull lines running into the margin.
+\setlength{\emergencystretch}{3em}
+\sloppy
+
+% Pandoc emits both of these; \tightlist for compact lists, the highlighting
+% macros for fenced code.
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+$highlighting-macros$
+
+% The question of each entry arrives as a block quote. Setting it apart from the
+% answer is the one piece of styling this document really needs.
+\usepackage{quoting}
+\quotingsetup{vskip=6pt, leftmargin=8pt, rightmargin=0pt, indentfirst=false}
+\renewenvironment{quote}{\begin{quoting}\itshape}{\end{quoting}}
+
+\setcounter{secnumdepth}{-\maxdimen}
+
+% One entry per page. Each entry is a \section, and a reader on a device is much
+% happier turning a page than scrolling into the middle of the next answer. The
+% flag is what keeps the document from opening on a blank page.
+\newif\ifsnorgdfirstentry\snorgdfirstentrytrue
+\let\snorgdsection\section
+\renewcommand{\section}[1]{%
+  \ifsnorgdfirstentry\snorgdfirstentryfalse\else\clearpage\fi
+  \snorgdsection{#1}%
+}
+
+\begin{document}
+$body$
+\end{document}

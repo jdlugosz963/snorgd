@@ -26,9 +26,14 @@ type Config struct {
 	Archive string
 	Remote  string
 
-	// StateDir persists the Dropbox cursor across restarts, kept outside the
-	// archive so it is never committed.
+	// StateDir persists the Dropbox cursor and the dispatcher's per-page form state
+	// across restarts, kept outside the archive so neither is ever committed.
 	StateDir string
+
+	// ConfigFile overrides where the pipeline configuration (ingest rules, the
+	// dispatch stage and its handlers) is read from. Empty means
+	// <Archive>/snorgd.yaml, so the rules travel with the notes repo.
+	ConfigFile string
 
 	// GitName/GitEmail are the committer identity used for archive commits, so the
 	// daemon does not depend on an ambient global git identity (containers, CI).
@@ -58,6 +63,7 @@ func Load() (*Config, error) {
 		Archive:             expandHome(os.Getenv("SNORGD_ARCHIVE")),
 		Remote:              os.Getenv("SNORGD_REMOTE"),
 		StateDir:            expandHome(os.Getenv("SNORGD_STATE_DIR")),
+		ConfigFile:          expandHome(strings.TrimSpace(os.Getenv("SNORGD_CONFIG"))),
 		GitName:             strings.TrimSpace(os.Getenv("SNORGD_GIT_NAME")),
 		GitEmail:            strings.TrimSpace(os.Getenv("SNORGD_GIT_EMAIL")),
 		SSHKey:              expandHome(strings.TrimSpace(os.Getenv("SNORGD_SSH_KEY"))),

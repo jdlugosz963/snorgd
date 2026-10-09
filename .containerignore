@@ -1,0 +1,24 @@
+# Keep the build context to source. Everything here is either runtime state, a
+# secret, or large enough to slow every build for nothing.
+
+.git
+.gitignore
+
+# Runtime state and data: the archive clone, cursor state, and the built binary.
+/arch
+/snorgd-state
+/snorgd
+
+# Secrets. The deploy keys are mounted at /keys at run time and the env file is
+# read by the container runtime — neither belongs in an image layer.
+/ssh
+snorgd.env
+.env
+
+# Local config; the container is configured through env vars and mounts.
+snorgd.yaml
+
+# Editor leftovers.
+\#*\#
+*~
+.#*

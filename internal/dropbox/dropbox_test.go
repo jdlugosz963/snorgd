@@ -10,7 +10,7 @@ import (
 func TestCursorRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.Config{DropboxFolder: "/Supernote", StateDir: dir}
-	d := New(cfg)
+	d := New(cfg, NewClient(cfg))
 	d.cursorPath = filepath.Join(dir, "dropbox.cursor")
 
 	if got := d.loadCursor(); got != "" {
@@ -22,7 +22,8 @@ func TestCursorRoundTrip(t *testing.T) {
 	}
 
 	// A cursor saved for a different folder must be ignored (forces a fresh listing).
-	other := New(&config.Config{DropboxFolder: "/Other", StateDir: dir})
+	otherCfg := &config.Config{DropboxFolder: "/Other", StateDir: dir}
+	other := New(otherCfg, NewClient(otherCfg))
 	other.cursorPath = d.cursorPath
 	if got := other.loadCursor(); got != "" {
 		t.Fatalf("cross-folder loadCursor = %q, want empty", got)
@@ -38,7 +39,8 @@ func TestFolderArg(t *testing.T) {
 		"/":           "",
 	}
 	for in, want := range cases {
-		d := New(&config.Config{DropboxFolder: in})
+		cfg := &config.Config{DropboxFolder: in}
+		d := New(cfg, NewClient(cfg))
 		if got := d.folderArg(); got != want {
 			t.Errorf("folderArg(%q) = %q, want %q", in, got, want)
 		}

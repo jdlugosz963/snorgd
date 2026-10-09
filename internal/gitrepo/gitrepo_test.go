@@ -1,13 +1,19 @@
 package gitrepo
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 )
 
 // initRepo makes a throwaway git repo (worktree) with a root commit under a fixed
@@ -174,4 +180,86 @@ func seedBare(t *testing.T) string {
 		t.Fatalf("seed push: %v", err)
 	}
 	return bare
+}
+
+// writeKnownHosts writes a known_hosts file containing exactly the given lines and
+// returns its path.
+func writeKnownHosts(t *testing.T, lines ...string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "known_hosts")
+	body := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write known_hosts: %v", err)
+	}
+	return path
+}
+
+// sshAuthOpts builds Options for an SSH remote with a throwaway private key.
+func sshAuthOpts(t *testing.T, remote, knownHosts string) Options {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	pem := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	path := filepath.Join(t.TempDir(), "id_rsa")
+	if err := os.WriteFile(path, pem, 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	return Options{Remote: remote, SSHKey: path, KnownHosts: knownHosts}
+}
+
+// The regression this guards: buildAuth used to set only HostKeyCallback, leaving
+// HostKeyAlgorithms empty. Go then advertised its own defaults, which rank ECDSA
+// above Ed25519, so a server offering several host keys could negotiate one absent
+// from known_hosts — reported as a *mismatch*, not an unknown host, even though the
+// recorded key was correct.
+func TestBuildAuthRestrictsHostKeyAlgorithmsToKnownHosts(t *testing.T) {
+	// An Ed25519-only entry, exactly like the failing real-world case.
+	kh := writeKnownHosts(t, "git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH0hDvHNCbnQ7pT2wPMwAj0LqQCU2FyGwNZbYbBGqDBk")
+
+	auth, err := buildAuth(sshAuthOpts(t, "git@git.example.com:repo", kh))
+	if err != nil {
+		t.Fatalf("buildAuth: %v", err)
+	}
+	pk, ok := auth.(*gitssh.PublicKeys)
+	if !ok {
+		t.Fatalf("auth is %T, want *ssh.PublicKeys", auth)
+	}
+
+	if len(pk.HostKeyAlgorithms) == 0 {
+		t.Fatal("HostKeyAlgorithms is empty; Go would fall back to its own preference and negotiate an algorithm known_hosts has no entry for")
+	}
+	for _, algo := range pk.HostKeyAlgorithms {
+		if !strings.Contains(algo, "ed25519") {
+			t.Errorf("advertised %q, but known_hosts holds only an ed25519 key", algo)
+		}
+	}
+	if pk.HostKeyCallback == nil {
+		t.Error("HostKeyCallback is nil; host keys would not be verified")
+	}
+}
+
+func TestBuildAuthLeavesAlgorithmsEmptyForAnUnknownHost(t *testing.T) {
+	kh := writeKnownHosts(t, "other.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH0hDvHNCbnQ7pT2wPMwAj0LqQCU2FyGwNZbYbBGqDBk")
+
+	// An absent host must not fail here: the callback reports it honestly at
+	// handshake time, which is a clearer error than anything buildAuth could give.
+	auth, err := buildAuth(sshAuthOpts(t, "git@git.example.com:repo", kh))
+	if err != nil {
+		t.Fatalf("buildAuth on an unknown host: %v", err)
+	}
+	if got := auth.(*gitssh.PublicKeys).HostKeyAlgorithms; len(got) != 0 {
+		t.Errorf("HostKeyAlgorithms = %v, want empty for a host with no entry", got)
+	}
+}
+
+func TestBuildAuthSkipsNonSSHRemotes(t *testing.T) {
+	auth, err := buildAuth(Options{Remote: "https://example.com/repo.git"})
+	if err != nil {
+		t.Fatalf("buildAuth: %v", err)
+	}
+	if auth != nil {
+		t.Errorf("auth = %v, want nil for an HTTPS remote", auth)
+	}
 }

@@ -5,3 +5,15 @@ snorgd.env
 # Docker deploy-key dir (mounted at /keys); keep the dir, ignore the keys.
 /ssh/*
 !/ssh/.gitkeep
+
+# Runtime state, local config and build artifacts.
+/arch
+/snorgd-state
+/snorgd.yaml
+*.tar.gz
+/jdlugosz.com
+
+# Editor leftovers (autosaves can hold copies of snorgd.env).
+\#*\#
+.#*
+*~

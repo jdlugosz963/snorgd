@@ -1,0 +1,145 @@
+# snorgd pipeline configuration.
+#
+# Location: <SNORGD_ARCHIVE>/snorgd.yaml by default, so the rules travel with the
+# notes repo. Override with SNORGD_CONFIG. The file is optional — without it snorgd
+# ingests every .note untagged and routes nothing.
+#
+# Secrets never belong here: Dropbox and git credentials come from the environment
+# (see snorgd.env.example), and the model provider comes from the archive's own
+# snorg config.yaml.
+
+pipeline:
+  # How long the queue must stay empty before the dispatch stage fires. A Supernote
+  # sync arrives as a burst; this collapses it into one pass and one commit instead
+  # of one per note.
+  quiet_period: 5s
+
+ingest:
+  # First matching rule wins, so put specific patterns above general ones. Globs are
+  # doublestar patterns matched case-insensitively against the full Dropbox path;
+  # "**" crosses directories and also matches zero of them.
+  #
+  # With no rules at all, everything is ingested untagged. As soon as one rule
+  # exists, the list becomes an allowlist: an unmatched note is dropped.
+  rules:
+    - match: "/Supernote/Scratch/**"
+      skip: true                    # matched and deliberately not ingested
+
+    - match: "/Supernote/**/*.note"
+      tags: [notes]                 # snorg tags, applied note-wide and inherited by every page
+
+analyze:
+  # Transcribe pages with the vision model. The prompts are not here: they live in the
+  # archive's own snorg config.yaml under `analysis:`, next to the provider
+  # credentials. This section only answers *which* pages.
+  enabled: true
+
+  # Rules select by tag, and a page is analyzed when at least one rule admits it. A
+  # rule admits a page carrying any one of its `tags` — unless the page also carries
+  # one of its `exclude` tags.
+  #
+  # Tags are matched exactly, against the page's *effective* tags: its own plus the
+  # ones it inherits from its note. That inheritance is the point. An ingest rule tags
+  # a whole note, so every page of it is covered by one line here, and a single page
+  # opts out with a tag of its own:
+  #
+  #     snorg tag no-ai P20260112093000abcdef
+  #
+  # `tags` may be omitted, which admits every page — that is how "everything except
+  # these" is spelled. No rules at all means every page.
+  #
+  # There is no force switch and nothing here narrows to unanalyzed pages: snorg skips
+  # a page whose ink is unchanged since its last analysis, so re-running the whole
+  # selection every batch costs no model calls, and a page rewritten on the device is
+  # picked up on its own.
+  rules:
+    - tags: [notes]
+      # Answered letter pages already hold a model's text; leave them alone.
+      exclude: [no-ai, ai-answered]
+
+dispatch:
+  # Read every page drawn on a registered template, and hand the ones whose answers
+  # have moved since the last batch to the handler that owns that template.
+  enabled: true
+  # Optional narrowing of which pages are read. The default, every page drawn on a
+  # configured template, is right in nearly every case; narrowing is how a large
+  # archive stays cheap, since each selected page costs one rasterization.
+  #
+  # snorg's query language, exactly as `snorg query` accepts it: terms joined by
+  # AND / OR / NOT and grouped with parentheses.
+  # Terms (no value): all, starred, unanalyzed, templated
+  # Terms (with a value): note, keyword, tag, content, region[<box-id>],
+  #   ctime:<spec> (created), mtime:<spec> (modified in the archive),
+  #   dtime:<spec> (changed on the device)
+  # Operators: ':' substring (case-insensitive), '~' regexp, '=' exact
+  # time <spec>: today | yesterday | YYYY-MM-DD | FROM..TO (either end may be empty)
+  query: "templated"
+
+letter:
+  # The "letter to AI" form: a slider for how long the answer should be, a style to
+  # answer in, and the rest of the sheet for the question. Draw the page with
+  # `snorgd gen-templates`.
+  enabled: true
+
+  # The base instruction, before the style and the length.
+  prompt: |
+    Answer the following handwritten question directly and completely, in the
+    language it is written in. Prefer a clear explanation over a bare fact.
+
+  # The styles the form offers. The keys are printed on the page as the radio's
+  # options, in sorted order, so changing this set changes the image: regenerate the
+  # template and re-import it on the device. A key must be usable as a box id —
+  # letters, digits, '_', '.' or '-', starting alphanumeric.
+  #
+  # Omitting the whole block gives a built-in set: general, study, code, letter.
+  topics:
+    general: "Answer plainly, without preamble."
+    study: |
+      Explain as a tutor would: define the terms, work through the reasoning step
+      by step, and close with a short summary.
+    code: |
+      Answer as an experienced programmer. Give complete, runnable code in a fenced
+      block and explain the parts that are not obvious.
+    letter: "Write a letter in the register the question asks for, ready to send as it stands."
+
+  # Used when no style is ticked. An unticked radio is unanswered, not an error.
+  default_topic: general
+
+  # Written on a page once it has been answered, as a marker for anyone browsing the
+  # archive, and how the collected PDF finds the answered pages. What stops a
+  # question being answered twice is the form state under SNORGD_STATE_DIR/forms.
+  answered_tag: "ai-answered"
+
+  # --- The collected PDF (optional) -------------------------------------------
+  #
+  # Every answer in the archive, newest page first, typeset into one document and
+  # published back to the device. Leave pdf_command empty to switch it off: the
+  # answers still land in each page's own answer region and are committed with the
+  # batch, which is where they are really kept.
+  #
+  # The document is rebuilt from the whole archive each time, so it is published once
+  # per batch, not once per answer: a sync carrying five questions costs one
+  # typesetting run and one upload.
+  #
+  # The command runs in a temp directory holding letters.md (the assembled markdown)
+  # and letters.tex (snorgd's embedded LaTeX template — see it with
+  # `snorgd gen-templates -print-tex`). {{in}} and {{out}} are substituted with the
+  # two paths. Pandoc converts the markdown to LaTeX, so maths, code and escaping are
+  # handled; the template is what the document looks like.
+  #
+  # Needs pandoc and a TeX installation. The container image carries both; running
+  # snorgd outside it means installing them yourself.
+  pdf_command: "pandoc -f markdown --template=letters.tex -o {{out}} {{in}}"
+
+  # Bounds one typesetting run, so a runaway document cannot wedge the daemon.
+  pdf_timeout: "2m"
+
+  # Where the document is published, and so where it appears on the device. Required
+  # once pdf_command is set.
+  #
+  # It may sit inside the watched folder: the watcher ignores anything that is not a
+  # .note, so the document it publishes cannot be ingested back.
+  dropbox_dir: "/Supernote/Letters"
+  # One accumulating document, rewritten in place each run, so the device sees a
+  # single file growing rather than a pile of them.
+  pdf_name: "letters.pdf"
