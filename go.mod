@@ -6,7 +6,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/jdlugosz963/snif v0.1.0
-	github.com/jdlugosz963/snorg v0.4.1
+	github.com/jdlugosz963/snorg v0.4.2
 	github.com/skeema/knownhosts v1.3.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -27,7 +27,7 @@ require (
 	github.com/gotranspile/cxgo v0.5.2 // indirect
 	github.com/gotranspile/gotrace v0.0.0-20230726133510-8c9665a39b09 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
-	github.com/jdlugosz963/sntool v1.3.1 // indirect
+	github.com/jdlugosz963/sntool v1.3.2 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/njchilds90/go-diffpatch v1.0.0 // indirect

@@ -56,10 +56,10 @@ github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 h1:BQSFePA1RWJOl
 github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99/go.mod h1:1lJo3i6rXxKeerYnT8Nvf0QmHCRC1n8sfWVwXF2Frvo=
 github.com/jdlugosz963/snif v0.1.0 h1:fAEWKe6GKe0rWosbiTdYHqi1RhpZU7q1bVHm3QAot2w=
 github.com/jdlugosz963/snif v0.1.0/go.mod h1:AnwWMDnXvZObqhasqnR6OukvkrtGlgKSQGGc+i3sYaM=
-github.com/jdlugosz963/snorg v0.4.1 h1:RlDWdoLBsrcTJb8YW3H6xn+YS/dMLWcOVjdPLRYytjg=
-github.com/jdlugosz963/snorg v0.4.1/go.mod h1:UexIYlmEF/NiEmlG+e5z5oZ5EFQWxSmuJLC2RuTvtDc=
-github.com/jdlugosz963/sntool v1.3.1 h1:TFjObiEx7ksQPbI6ODaCIHaMKeLuX1WV7WxE6Cao+0U=
-github.com/jdlugosz963/sntool v1.3.1/go.mod h1:p7uTOMuyBd2KiX+2M9rcze+NkZozxhTzxUurFDHpKVA=
+github.com/jdlugosz963/snorg v0.4.2 h1:GqXwvHPKbfW/WumqIMqJU8CLjaT+xYJ+F56IrhqPZBc=
+github.com/jdlugosz963/snorg v0.4.2/go.mod h1:O1itkAm4viRUtg201o2CcRHqFd13JvtbwoE4oWWU+Tw=
+github.com/jdlugosz963/sntool v1.3.2 h1:t2gpSHwFSmnSuSh92Sq4r3p/HjdooCu1tCESNcOp6A0=
+github.com/jdlugosz963/sntool v1.3.2/go.mod h1:p7uTOMuyBd2KiX+2M9rcze+NkZozxhTzxUurFDHpKVA=
 github.com/kevinburke/ssh_config v1.2.0 h1:x584FjTGwHzMwvHx18PXxbBVzfnxogHaAReU4gf13a4=
 github.com/kevinburke/ssh_config v1.2.0/go.mod h1:CT57kijsi8u/K/BOFA39wgDQJ9CxiF4nAY/ojJ6r6mM=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
