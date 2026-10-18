@@ -25,6 +25,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -81,6 +82,8 @@ usage:
 
 // run is the daemon.
 func run() {
+	log.Printf("snorgd: built with %s", depVersions())
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -146,6 +149,27 @@ func run() {
 	log.Printf("snorgd: watching %s -> %s", cfg.DropboxFolder, cfg.Archive)
 	daemon.New(pipeline.Ingest.Rules, ing, phases, repo, pipeline.Pipeline.QuietPeriod.Duration()).Run(ctx, events)
 	log.Printf("snorgd: shut down")
+}
+
+// depVersions names the snorg-family modules compiled into this binary. Logging them
+// at startup is how to tell whether a container really runs the image just built,
+// since an untagged rebuild leaves compose starting the previous one.
+func depVersions() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown versions"
+	}
+	var parts []string
+	for _, m := range info.Deps {
+		switch m.Path {
+		case "github.com/jdlugosz963/snorg", "github.com/jdlugosz963/sntool", "github.com/jdlugosz963/snif":
+			if m.Replace != nil {
+				m = m.Replace
+			}
+			parts = append(parts, filepath.Base(m.Path)+" "+m.Version)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // buildPhases constructs the downstream stages, in the order a batch runs them:
